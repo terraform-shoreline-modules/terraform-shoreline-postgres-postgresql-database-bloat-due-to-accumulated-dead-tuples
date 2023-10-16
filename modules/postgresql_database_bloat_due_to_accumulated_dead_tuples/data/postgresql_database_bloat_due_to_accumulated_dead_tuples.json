@@ -1,0 +1,198 @@
+{
+  "name": "postgresql_database_bloat_due_to_accumulated_dead_tuples",
+  "description": "runbook description unknown",
+  "params": [
+    {
+      "name": "DATABASE_PASSWORD",
+      "value": ""
+    },
+    {
+      "name": "LOG_FILE_PATH",
+      "value": ""
+    },
+    {
+      "name": "DATABASE_INDEX",
+      "value": ""
+    },
+    {
+      "name": "PG_REPACK_THRESHOLD",
+      "value": ""
+    },
+    {
+      "name": "DATABASE_PORT",
+      "value": ""
+    },
+    {
+      "name": "DATABASE_NAME",
+      "value": ""
+    },
+    {
+      "name": "DATABASE_USER",
+      "value": ""
+    },
+    {
+      "name": "VACUUM_FULL_THRESHOLD",
+      "value": ""
+    },
+    {
+      "name": "DATABASE_TABLE",
+      "value": ""
+    },
+    {
+      "name": "SCHEMA_NAME",
+      "value": ""
+    },
+    {
+      "name": "HOST_NAME",
+      "value": ""
+    },
+    {
+      "name": "K8S_CLUSTER_NAME",
+      "value": ""
+    },
+    {
+      "name": "NAMESPACE",
+      "value": ""
+    }
+  ],
+  "cells": [
+    {
+      "name": "cell_1",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## PostgreSQL database bloat due to accumulated dead tuples\nrunbook description unknown"
+    },
+    {
+      "name": "cell_2",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check if the database is running"
+    },
+    {
+      "name": "cell_3",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "host | host_name=$HOST_NAME | invoke_pg_status()"
+    },
+    {
+      "name": "cell_4",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check the size of the database"
+    },
+    {
+      "name": "cell_5",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `sudo -u postgres psql -c \"SELECT pg_size_pretty(pg_database_size('${DATABASE_NAME}'));\" ${DATABASE_NAME}`"
+    },
+    {
+      "name": "cell_6",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check the amount of dead tuples"
+    },
+    {
+      "name": "cell_7",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `sudo -u postgres psql -c \"SELECT schemaname, relname, n_dead_tup FROM pg_stat_user_tables ORDER BY n_dead_tup DESC LIMIT 10;\"`"
+    },
+    {
+      "name": "cell_8",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check for index bloat"
+    },
+    {
+      "name": "cell_9",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `sudo -u postgres psql -c \"SELECT t.tablename,  indexname,  c.reltuples, i.relpages, i.relpages * 8 / 1024 AS mb FROM pg_tables t INNER JOIN pg_indexes i ON t.tablename = i.tablename INNER JOIN pg_class c ON i.indexname = c.relname WHERE t.schemaname = '${SCHEMA_NAME}' ORDER BY mb DESC;\" ${DATABASE_NAME}`"
+    },
+    {
+      "name": "cell_10",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check if autovacuum is enabled"
+    },
+    {
+      "name": "cell_11",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `sudo -u postgres psql -c \"SHOW autovacuum_enabled;\"`"
+    },
+    {
+      "name": "cell_12",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check if VACUUM FULL was run previously"
+    },
+    {
+      "name": "cell_13",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `sudo -u postgres psql -c \"SELECT relname, last_vacuum, last_autovacuum, last_analyze, last_autoanalyze FROM pg_stat_all_tables WHERE schemaname = '${SCHEMA_NAME}' ORDER BY relname;\"`"
+    },
+    {
+      "name": "cell_14",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check for table and index bloat using pg_repack"
+    },
+    {
+      "name": "cell_15",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `pg_repack -d ${DATABASE_NAME} -t ${DATABASE_TABLE} -U ${DATABASE_USER} -p ${DATABASE_PORT} --dry-run`"
+    },
+    {
+      "name": "cell_16",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Check for pg_repack errors"
+    },
+    {
+      "name": "cell_17",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "(host | host_name=$HOST_NAME) union (pod | k8s_cluster_name=$K8S_CLUSTER_NAME | namespace=$NAMESPACE) | `pg_repack -d ${DATABASE_NAME} -t ${DATABASE_TABLE} -U ${DATABASE_USER} -p ${DATABASE_PORT} --check-only`"
+    },
+    {
+      "name": "cell_18",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Regularly monitor database tables and indexes for bloat using tools like pgstattuple and pg_repack."
+    },
+    {
+      "name": "cell_19",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "host | host_name=$HOST_NAME | invoke_monitor_bloat_and_repack($DATABASE_INDEX, $DATABASE_NAME, $DATABASE_TABLE)"
+    },
+    {
+      "name": "cell_20",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Use VACUUM FULL or pg_repack to reclaim disk space and improve performance, but schedule these operations during low traffic periods to minimize impact on queries."
+    },
+    {
+      "name": "cell_21",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "host | host_name=$HOST_NAME | invoke_vacuum_pg_repack($LOG_FILE_PATH, $PG_REPACK_THRESHOLD, $DATABASE_NAME, $VACUUM_FULL_THRESHOLD, $DATABASE_TABLE)"
+    },
+    {
+      "name": "cell_22",
+      "type": "MARKDOWN",
+      "enabled": true,
+      "content": "## Optimize SQL queries to reduce the number of UPDATE and DELETE operations and minimize the accumulation of dead tuples."
+    },
+    {
+      "name": "cell_23",
+      "type": "OP_LANG",
+      "enabled": true,
+      "content": "host | host_name=$HOST_NAME | invoke_optimize_sql_queries($DATABASE_PASSWORD, $DATABASE_NAME, $DATABASE_USER)"
+    }
+  ]
+}
